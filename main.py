@@ -5,6 +5,8 @@ import numpy as np
 import constants as cst
 from taichiphysics import *
 from res_energy import *
+from particle import Particle
+import time
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
@@ -78,3 +80,126 @@ if __name__ == '__main__':
     print('resonant wave number at reslat is :', k0)
     print('resonating frequency is (Hz) ', w_res/(2 * np.pi))
     print('E0 is ', erg2ev(p2e(p0))/1000, ' keV')
+
+    # First write the particle motion
+
+    # determine total T
+    T_bounce = 1 / bouncef(L_shell,cst.Planet_Radius,p0,mass,alpha_eq)
+    T_total = t_total_num * T_bounce
+
+    gamma = (1 + p0**2 / (cst.Me**2*cst.C**2))**0.5
+    wce_rel = wce0/gamma
+    T_gyro = 2 * np.pi/ wce_rel
+
+    dt = T_gyro * dt_num
+    Nt = int(T_total/dt)
+
+    print('time step is ', dt)
+    print('total time is',T_total)
+    print('total time step is', Nt)
+
+    #
+    ti.init(arch = ti.cpu,default_fp=ti.f64)
+
+    particles = Particle.field(shape = (Np,))
+    dt_taichi = ti.field(ti.f64, shape=())
+    dt_taichi[None] = dt
+    ################################################################
+    # generate initial moment
+    dphi = 2 * np.pi / Np
+
+    pperp = p0 * np.sin(alpha)
+
+    px_numpy = np.zeros(Np)
+    py_numpy = np.zeros(Np)
+    pz_numpy = np.zeros(Np)
+
+    for n in range(Np):
+        phi = dphi * n
+        px_numpy[n] = pperp * np.cos(phi)
+        py_numpy[n] = pperp * np.sin(phi)
+        pz_numpy[n] = p0 * np.cos(alpha)
+
+    px_init = ti.field(dtype = ti.f64,shape = (Np,))
+    py_init= ti.field(dtype = ti.f64,shape = (Np,))
+    pz_init= ti.field(dtype = ti.f64,shape = (Np,))
+
+    px_init.from_numpy(px_numpy)
+    py_init.from_numpy(py_numpy)
+    pz_init.from_numpy(pz_numpy)
+
+    ################################################################
+    # record
+    print('Record num is', Nt//record_num)
+    p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+    # E_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+
+    # B_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+
+    r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+    phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num, Np))
+    ################################################################
+    #
+    @ti.kernel
+    def init():
+        for n in range(Np):
+            particles[n].initParticles(mass, charge)
+            particles[n].initPos(0.0,0.0,alpha,L_shell)
+            particles[n].initMomentum(px_init[n], py_init[n],pz_init[n])
+        B = ti.Vector([0.0,0.0,bz0])
+        E = ti.Vector([0.0,0.0,0.0])
+
+        for n in range(Np):
+            particles[n].boris_push(-dt_taichi[None]/2,E,B)
+
+    @ti.kernel
+    def simulate_t():
+        for n in range(Np):
+            for tt in range(Nt):
+                B =ti.Vector([0.0,0.0,bz0])
+                E = ti.Vector([0.0,0.0,0.0])
+                # update the wave
+                particles[n].t += dt_taichi[None] 
+                particles[n].leap_frog(dt_taichi[None],E,B) # change nth particle's p and r
+                particles[n].Ep = E
+                particles[n].Bp = B
+                phip = ti.atan2(particles[n].p[1],particles[n].p[0])
+                particles[n].phi = phip
+                if (particles[n].phi < 0):
+                    particles[n].phi += 2*ti.math.pi
+                if tt%record_num ==0:
+                    #print('tt',tt)
+                    p_record_taichi[tt//record_num, n] = particles[n].p
+                    r_record_taichi[tt//record_num, n] = particles[n].r
+                    phi_record_taichi[tt//record_num, n] = particles[n].phi
+    start_time = time.time()
+    init()
+    #print(particles[1].r)
+    simulate_t()
+
+
+
+    print('finished')
+    # End of the main loop
+    ###################################################
+    time_used = time.time() - start_time
+    print("--- %s seconds ---" % (time_used))
+    
+    ###################################################
+
+    p_results = p_record_taichi.to_numpy()
+    r_results = r_record_taichi.to_numpy()
+    # Ep_results = E_record_taichi.to_numpy()
+    # Bp_results = B_record_taichi.to_numpy()
+    phi_results = phi_record_taichi.to_numpy()
+    with open(id + '/' + 'p_r_phi.npy','wb') as f:
+        np.save(f,p_results)
+        np.save(f,r_results)
+        np.save(f,phi_results)
+    # save the output info for checking
+    with open(id + '/' + 'output.txt', 'w') as f:
+        f.write(f"The resonating frequency is {w_res/(2 * np.pi)} (Hz)\n")
+
+        f.write(f"momentum of resonating particles are: {p0}\n")
+        f.write(f"E0 is  {erg2ev(p2e(p0))/1000} keV\n")
+        f.write(f"--- %s seconds ---" % (time_used))

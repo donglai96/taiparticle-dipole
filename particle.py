@@ -22,6 +22,7 @@ class Particle:
     m: ti.f64
     q: ti.f64
     t: ti.f64
+    L: ti.f64
     #deltat: ti.f64
     alpha: ti.f64 #pitch angle
     alpha0: ti.f64 #equator pitch angle
@@ -38,8 +39,9 @@ class Particle:
         self.Bp = ti.Vector([0,0,0])
         #self.deltat = deltat
     @ti.func
-    def initPos(self, x, y, z):
+    def initPos(self, x, y, z, L ):
         self.r = ti.Vector([x, y, z]) #z would be latitude
+        self.L = L # L shell of the particle
     @ti.func
     def initMomentum(self, px, py, pz):
         self.p = ti.Vector([px, py, pz])
@@ -96,8 +98,9 @@ class Particle:
         
         v_xyz = self.p / gammam
         #print('xyz',v_xyz)
-        
-
+        lat = self.r[2]
+        ratio = ti.Vector([1, 1, 1/(self.L * cst.Planet_Radius * \
+            ti.sqrt((1 + 3 * ti.sin(lat) * ti.sin(lat))) * ti.cos(lat))])
     
        
-        self.r += dt * v_xyz 
+        self.r += 0.5 * dt * v_xyz * ratio

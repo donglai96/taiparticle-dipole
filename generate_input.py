@@ -85,7 +85,7 @@ def save_input( folder,
             # if key == 'pitch_angle_degree':
             #     f.write('# initial pitchangle, in the range of [90, 180]. e.g. 160 -> 20, 170->10\n')
             if key == 't_total_num':
-                f.write('# length of run in gyroperiod (relativistic)\n')
+                f.write('# length of run in bounceperiod\n')
             if key == 'record_num':
                 f.write('# how many step make one record\n')
             if key == 'dt_num':
@@ -125,8 +125,8 @@ if __name__ == '__main__':
     Np = 400
 
 
-    # length of run (in gyroperiod)
-    t_total_num = 1000
+    # length of run (in bounceperiod)
+    t_total_num = 0.25
 
     # record x (how many step make a record)
     record_num = 250

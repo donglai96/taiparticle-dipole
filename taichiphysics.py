@@ -1,6 +1,8 @@
 import numpy as np
 import taichi as ti
 import constants as cst
+from scipy.optimize import fsolve
+
 C = 3e10
 M = 9.1094e-28 
 Q = 4.8032e-10
@@ -87,3 +89,16 @@ def electron_density(dis,n0,lat):
         return n0
     elif dis == 'cos':
         return n0*(np.cos(lat)**-4)
+
+def mirrorpoints(alpha_eq):
+    def get_mirrorpoint2(x):
+        return (1 - x)**3 - np.sin(alpha_eq)**2 * (1 + 3*x)**0.5
+    sin2alpha_m = fsolve(get_mirrorpoint2, 0)
+    
+    alpha_m = np.arcsin(np.sqrt(sin2alpha_m))
+    print('The mirror point is: ',np.rad2deg(alpha_m))
+    return alpha_m
+def bouncef(L,R,p,m,alpha_eq):
+    T = 1.3802 - 0.31985 * (np.sin(alpha_eq) + np.sqrt(np.sin(alpha_eq)))
+    gamma = (1 + p**2 /(m **2 * cst.C**2))**0.5
+    return p/(4 * gamma * m * L * R* T)
