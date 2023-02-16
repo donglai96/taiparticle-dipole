@@ -103,4 +103,4 @@ class Particle:
             ti.sqrt((1 + 3 * ti.sin(lat) * ti.sin(lat))) * ti.cos(lat))])
     
        
-        self.r += 0.5 * dt * v_xyz * ratio
+        self.r += dt * v_xyz * ratio

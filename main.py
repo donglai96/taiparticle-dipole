@@ -69,8 +69,11 @@ if __name__ == '__main__':
     #############################
     print('***************')
     print('Calculate the resonating energy')
-    print(alpha_eq,'alpha_eq')
-    alpha = get_pitchanlge_from_eq(alpha_eq,res_lat,direction)
+    print(alpha_eq,'alpha_eq',np.rad2deg(alpha_eq))
+    alpha = get_pitchanlge_from_eq(alpha_eq,res_lat,direction) # at res
+    alpha_init = get_pitchanlge_from_eq(alpha_eq,lat_init,direction)
+    print('alpha_init is:',np.rad2deg(alpha_init),'rad',alpha_init)
+    print('alpha_eq at init is', get_equator_pitchangle(alpha_init,lat_init))
     _,_,bz_lat = dipole_field(cst.B0,L_shell,cst.Planet_Radius,0,0,res_lat)
     wce_alpha = gyrofrequency(cst.Charge,cst.Me,bz_lat)
 
@@ -108,7 +111,7 @@ if __name__ == '__main__':
     # generate initial moment
     dphi = 2 * np.pi / Np
 
-    pperp = p0 * np.sin(alpha)
+    pperp = p0 * np.sin(alpha_init)
 
     px_numpy = np.zeros(Np)
     py_numpy = np.zeros(Np)
@@ -118,7 +121,7 @@ if __name__ == '__main__':
         phi = dphi * n
         px_numpy[n] = pperp * np.cos(phi)
         py_numpy[n] = pperp * np.sin(phi)
-        pz_numpy[n] = p0 * np.cos(alpha)
+        pz_numpy[n] = p0 * np.cos(alpha_init)
 
     px_init = ti.field(dtype = ti.f64,shape = (Np,))
     py_init= ti.field(dtype = ti.f64,shape = (Np,))
@@ -131,33 +134,42 @@ if __name__ == '__main__':
     ################################################################
     # record
     print('Record num is', Nt//record_num)
-    p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+    p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
     # E_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
 
     # B_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
 
-    r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
-    phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num, Np))
+    r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
+    phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num + 1, Np))
     ################################################################
     #
     @ti.kernel
     def init():
         for n in range(Np):
             particles[n].initParticles(mass, charge)
-            particles[n].initPos(0.0,0.0,alpha,L_shell)
+            particles[n].initPos(0.0,0.0,lat_init,L_shell)
+            print('init position',particles[n].r)
             particles[n].initMomentum(px_init[n], py_init[n],pz_init[n])
-        B = ti.Vector([0.0,0.0,bz0])
+            particles[n].get_pitchangle()
+            print('The real init p',1e20*particles[n].p.norm())
+            print('The initial pitchangle is',particles[n].alpha)
+        B = dipole_field_taichi(L_shell,particles[n].r,cst.B0)
+        print('The init B is', B)
         E = ti.Vector([0.0,0.0,0.0])
 
         for n in range(Np):
             particles[n].boris_push(-dt_taichi[None]/2,E,B)
+            print('after first step')
+            print(1e20*particles[n].p.norm())
 
     @ti.kernel
     def simulate_t():
         for n in range(Np):
             for tt in range(Nt):
-                B =ti.Vector([0.0,0.0,bz0])
+                
+                # B =ti.Vector([0.0,0.0,bz0])
                 E = ti.Vector([0.0,0.0,0.0])
+                B = dipole_field_taichi(L_shell,particles[n].r,cst.B0)
                 # update the wave
                 particles[n].t += dt_taichi[None] 
                 particles[n].leap_frog(dt_taichi[None],E,B) # change nth particle's p and r
@@ -169,6 +181,10 @@ if __name__ == '__main__':
                     particles[n].phi += 2*ti.math.pi
                 if tt%record_num ==0:
                     #print('tt',tt)
+                    # print('tt',tt)
+                    # print('r',particles[n].r)
+                    # print(tt//record_num)
+                    
                     p_record_taichi[tt//record_num, n] = particles[n].p
                     r_record_taichi[tt//record_num, n] = particles[n].r
                     phi_record_taichi[tt//record_num, n] = particles[n].phi
@@ -189,6 +205,8 @@ if __name__ == '__main__':
 
     p_results = p_record_taichi.to_numpy()
     r_results = r_record_taichi.to_numpy()
+    print('r0')
+    print(r_results[0,0,2])
     # Ep_results = E_record_taichi.to_numpy()
     # Bp_results = B_record_taichi.to_numpy()
     phi_results = phi_record_taichi.to_numpy()
