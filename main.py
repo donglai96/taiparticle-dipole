@@ -7,7 +7,8 @@ from taichiphysics import *
 from res_energy import *
 from particle import Particle
 import time
-
+from wave import Waves
+from wavepacket import Wave
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         print("The running id:", sys.argv[1:])
@@ -39,8 +40,15 @@ if __name__ == '__main__':
     print('gyrofrequency(rad/s) at L ',L_shell,' = ', wce0 )
     n0 = paras['n0']
     n_dis = paras['n_dis']
-    
-
+    if n_dis == 'cos':
+        n_dis_taichi = 1
+    # elif n_dis == 'const':
+    #     n_dis_taichi =0
+    else:
+        raise ValueError('The density profile is wrong \
+     , only support cos,please change the code in taichi and density!')
+    nlat = paras['nlat']
+    wave_lat_max = np.deg2rad(paras['wave_lat_max'])
 
     # number of charged particles
     Np = paras['Np']
@@ -53,8 +61,12 @@ if __name__ == '__main__':
     w_width_num = paras['w_width_num']#!
     if w_res_num < 1:
         w_res = w_res_num * wce0
+        w_lc = w_lc_num * wce0
+        w_uc = w_uc_num * wce0
     else:
         w_res = w_res_num * 2 * np.pi
+        w_lc = w_lc_num * 2 * np.pi
+        w_uc = w_uc_num * 2 * np.pi
     nw = paras['nw']
     # wave frequency width
     alpha_eq = np.deg2rad(paras['alpha_eq'])
@@ -130,17 +142,53 @@ if __name__ == '__main__':
     px_init.from_numpy(px_numpy)
     py_init.from_numpy(py_numpy)
     pz_init.from_numpy(pz_numpy)
+    ################################################################
+    # firstly initialize the wave with numpy
+    waves_numpy = Waves(nw, L_shell, nlat, 0, wave_lat_max, n0,n_dis)
+
+    # wave amplitude modulation is here
+    #ratio_Bw_lat = Bw0 * np.tanh(np.rad2deg(waves_numpy.lats)) * np.tanh(30 - np.rad2deg(waves_numpy.lats))
+    ratio_Bw_lat = Bw
+    Bw_lat = np.zeros((nw, nlat)) + ratio_Bw_lat
+
+    if nw ==1:
+        ws = np.array([w_res])
+    else:
+        iw_res = int((w_res - w_lc) / ((w_uc - w_lc) / (nw - 1)))
+        dw = (w_uc - w_lc) / (nw - 1)
+        w_lc_temp = w_res - iw_res * dw; 
+        ws = np.array([i * dw for i in range(nw)] ) + w_lc_temp
+    ws_taichi = ti.field(dtype = ti.f64, shape = (nw,))
+    ws_taichi.from_numpy(ws)
+    waves_numpy.generate_parallel_wave(ws,Bw_lat)
+    phiz_interp = ti.field(dtype = ti.f64,shape = (nw,nlat))
+    Bw_interp = ti.field(dtype = ti.f64,shape = (nw,nlat))
+    lat_interp = ti.field(dtype = ti.f64,shape = (nlat,))
+
+    phiz_interp.from_numpy(waves_numpy.phi_z)
+    Bw_interp.from_numpy(waves_numpy.Bw0s)
+    lat_interp.from_numpy(waves_numpy.lats)
+    waves = Wave.field(shape = (nw,))
 
     ################################################################
     # record
     print('Record num is', Nt//record_num)
-    p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
-    # E_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+    if Nt%record_num > 0:
+        p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
+        # E_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
 
-    # B_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+        # B_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
 
-    r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
-    phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num + 1, Np))
+        r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num + 1, Np))
+        phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num + 1, Np))
+    else:
+        p_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num , Np))
+        # E_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+
+        # B_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num, Np))
+
+        r_record_taichi = ti.Vector.field(n=3,dtype = ti.f64,shape = (Nt//record_num , Np))
+        phi_record_taichi = ti.field(dtype = ti.f64,shape = (Nt//record_num , Np))
     ################################################################
     #
     @ti.kernel
@@ -148,19 +196,26 @@ if __name__ == '__main__':
         for n in range(Np):
             particles[n].initParticles(mass, charge)
             particles[n].initPos(0.0,0.0,lat_init,L_shell)
-            print('init position',particles[n].r)
+            #print('init position',particles[n].r)
             particles[n].initMomentum(px_init[n], py_init[n],pz_init[n])
             particles[n].get_pitchangle()
-            print('The real init p',1e20*particles[n].p.norm())
-            print('The initial pitchangle is',particles[n].alpha)
+            # print('The real init p',1e20*particles[n].p.norm())
+            # print('The initial pitchangle is',particles[n].alpha)
         B = dipole_field_taichi(L_shell,particles[n].r,cst.B0)
         print('The init B is', B)
         E = ti.Vector([0.0,0.0,0.0])
 
         for n in range(Np):
             particles[n].boris_push(-dt_taichi[None]/2,E,B)
-            print('after first step')
-            print(1e20*particles[n].p.norm())
+            # print('after first step')
+            # print(1e20*particles[n].p.norm())
+        # initiate the wave
+        for m in range(nw):
+            waves[m].initialize(ws_taichi[m] , L_shell, n0, 
+                    0.0*ti.math.pi/180, wave_lat_max)
+        
+
+        
 
     @ti.kernel
     def simulate_t():
@@ -170,7 +225,37 @@ if __name__ == '__main__':
                 # B =ti.Vector([0.0,0.0,bz0])
                 E = ti.Vector([0.0,0.0,0.0])
                 B = dipole_field_taichi(L_shell,particles[n].r,cst.B0)
+                Bw = ti.Vector([0.0,0.0,0.0])
+                Ew = ti.Vector([0.0,0.0,0.0])
                 # update the wave
+                for m in (range(nw)):
+                    
+                    if particles[n].r[2] < wave_lat_max :
+                        if particles[n].r[2] > 0:
+                            phiz_index = interp(lat_interp,particles[n].r[2],nlat)
+                            #print('phiz_index is', phiz_index)
+                            #print('lat_interp is', particles[n].r[2])
+                            index1 = ti.floor(phiz_index,dtype = ti.i32)
+                            index2 = index1 + 1
+                            phiz = ti.math.mix(phiz_interp[m,index1],phiz_interp[m,index2],phiz_index-index1)
+                            # print('interp process',phiz_interp[m,index1],phiz_interp[m,index2],phiz_index)
+                            # print('interp result',phiz)
+                            #print('index',index1)
+                            #print('phiz',phiz)
+                            Bw_interp = ti.math.mix(Bw_interp[m,index1],Bw_interp[m,index2],phiz_index-index1)
+
+                            waves[m].get_field(particles[n].r,particles[n].t, phiz, Bw_interp)
+                            
+                            #print('t_dt in scope',dt)n
+                            #print('Bw',Bw_interp)
+                            #print('t!',t)
+                            #print(Bw_interp)
+                            Bw += waves[m].Bw
+                            Ew += waves[m].Ew
+                E = Ew
+                B = B + Bw
+
+
                 particles[n].t += dt_taichi[None] 
                 particles[n].leap_frog(dt_taichi[None],E,B) # change nth particle's p and r
                 particles[n].Ep = E

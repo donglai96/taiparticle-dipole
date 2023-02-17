@@ -102,3 +102,51 @@ def bouncef(L,R,p,m,alpha_eq):
     T = 1.3802 - 0.31985 * (np.sin(alpha_eq) + np.sqrt(np.sin(alpha_eq)))
     gamma = (1 + p**2 /(m **2 * cst.C**2))**0.5
     return p/(4 * gamma * m * L * R* T)
+
+def s_numpy(L, R, lat):
+    x = np.sin(lat)
+    tt = np.sqrt(x**2 + 1.0 / 3)
+  
+    return L * R * np.sqrt(3) * (0.5 * x * tt + np.log(np.sqrt(3) * abs(x + tt)) / 6.0)
+def get_dipole_numpy(L, lat, B0):
+    cos_lat= np.cos(lat)
+    sin_lat = np.sin(lat)
+    Bz = B0/(L**3 * cos_lat**6) * np.sqrt(1 + 3 * sin_lat ** 2)
+    return Bz
+
+@ti.func
+def interp(xx,x,n):
+    jl = -1
+    ju = n
+    jm = 0
+    j = 0
+    frac = 0.0
+    
+    ascnd = (xx[n - 1]>= xx[0])
+    #print(ascnd)
+    while ((ju - jl) > 1):
+        jm = ti.floor((ju + jl)/2,dtype = ti.i32)
+    
+        if ((x >= xx[jm]) == ascnd):
+            jl = jm
+        else:
+            ju = jm
+    #print(jm)
+            
+    if (x == xx[0]):
+        j = 0
+    elif (x == xx[n-1]):
+        j = n-2
+    else:
+        j = jl
+    #print('find',j)
+    if (j == -1):
+        frac = -1
+    elif (j == n-1):
+        frac = n-1
+    else:
+        frac = j + (x - xx[j]) / (xx[j + 1] - xx[j])
+        
+    
+        
+    return frac

@@ -19,7 +19,9 @@ def save_input( folder,
                w_uc_num,
                w_width_num,
                nw,
-               Bw
+               nlat,
+               Bw,
+               wave_lat_max
 
                ):
     print('generating input at folder: ', folder+ '/'  + id)
@@ -45,7 +47,9 @@ def save_input( folder,
             'w_uc_num':w_uc_num,
             'w_width_num':w_width_num,
             'nw':nw,
-            'Bw':Bw
+            'nlat':nlat,
+            'Bw':Bw,
+            'wave_lat_max':wave_lat_max
             # 'Np':Np,
             # 'pitch_angle_degree':pitch_angle_degree,
             # 't_total_num':t_total_num,
@@ -102,8 +106,12 @@ def save_input( folder,
 
             if key == 'dz_num':
                 f.write('# z range in units of res wave length\n')
+            if key == 'nlat':
+                f.write('# lat grid numbers\n')
             if key =='Bw':
                 f.write('# wave amplitude in Gauss (Bw,j = Bw / sqrt(nw))\n')
+            if key =='wave_lat_max':
+                f.write('# maximum lat for waves\n')
             # if key =='wave_distribution':
             #     f.write('# wave distribution, support Constant and Guassian\n')
             
@@ -150,6 +158,7 @@ if __name__ == '__main__':
 
     # z range in units of res wave
     # wave amplitude in Gauss
+    nlat = 1000
     Bw = 3e-6
 
     # init mass and charge
@@ -157,9 +166,11 @@ if __name__ == '__main__':
     charge = cst.Charge * -1 # -1 is electron
 
     # wave direction
+    wave_lat_max = 15
 
     #wave_distribution = "Gaussian"
     wave_distribution = "Constant"
+    
     save_input( folder,
                id,
                L_shell,
@@ -177,6 +188,8 @@ if __name__ == '__main__':
                w_uc_num,
                w_width_num,
                nw,
-               Bw
+               nlat,
+               Bw,
+               wave_lat_max
 
                )
