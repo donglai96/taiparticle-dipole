@@ -1,7 +1,7 @@
 import numpy as np
 import constants as cst
 import os
-
+import sys
 def save_input( folder,
                id,
                L_shell,
@@ -119,7 +119,11 @@ def save_input( folder,
 
 if __name__ == '__main__':
     folder = '.'
-    id = 'test'
+    if len(sys.argv) > 1:
+        print("The running id:", sys.argv[1:])
+        id = sys.argv[1]
+    else:
+        id = 'test'
     # background magnetic field strength (Gauss)
 
     L_shell = 6.4
@@ -134,7 +138,7 @@ if __name__ == '__main__':
 
 
     # length of run (in bounceperiod)
-    t_total_num = 0.25
+    t_total_num = 0.125
 
     # record x (how many step make a record)
     record_num = 250

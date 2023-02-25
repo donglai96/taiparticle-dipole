@@ -1,7 +1,7 @@
 # L shell for dipole field
 L_shell: 6.4
 # number of charged particles
-Np: 120
+Np: 400
 # density in cm^-3
 n0: 10
 # The function of density dis (const or cos)

@@ -9,6 +9,7 @@ from particle import Particle
 import time
 from wave import Waves
 from wavepacket import Wave
+
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         print("The running id:", sys.argv[1:])
@@ -93,6 +94,9 @@ if __name__ == '__main__':
     p0, k0 = get_resonance_p_whistler(w_res,wce_alpha,n_lat,alpha,nres = -1)
     print('momentum of resonating particles are:',p0)
     print('resonant wave number at reslat is :', k0)
+    wave_length_res = 1/k0 * 1/(L_shell * cst.Planet_Radius * \
+            np.sqrt((1 + 3 * np.sin(res_lat) * np.sin(res_lat))) * np.cos(res_lat))
+    print('The estimate wavelength is in z coordinate:', wave_length_res)
     print('resonating frequency is (Hz) ', w_res/(2 * np.pi))
     print('E0 is ', erg2ev(p2e(p0))/1000, ' keV')
 
@@ -147,8 +151,10 @@ if __name__ == '__main__':
     waves_numpy = Waves(nw, L_shell, nlat, 0, wave_lat_max, n0,n_dis)
 
     # wave amplitude modulation is here
-    #ratio_Bw_lat = Bw0 * np.tanh(np.rad2deg(waves_numpy.lats)) * np.tanh(30 - np.rad2deg(waves_numpy.lats))
-    ratio_Bw_lat = Bw
+    # ratio_Bw_lat = Bw * np.tanh(np.rad2deg(waves_numpy.lats)) * np.tanh(30 - np.rad2deg(waves_numpy.lats))
+    # 
+    ratio_Bw_lat = Bw * np.exp(-10 * (np.cos(waves_numpy.lats/(2 * np.pi * wave_length_res*10)))**2)
+    #ratio_Bw_lat = Bw
     Bw_lat = np.zeros((nw, nlat)) + ratio_Bw_lat
 
     if nw ==1:
@@ -299,6 +305,10 @@ if __name__ == '__main__':
         np.save(f,p_results)
         np.save(f,r_results)
         np.save(f,phi_results)
+    with open(id + '/' + 'wave_info.npy','wb') as f:
+        np.save(f,Bw_lat)
+        np.save(f,waves_numpy.lats)
+        
     # save the output info for checking
     with open(id + '/' + 'output.txt', 'w') as f:
         f.write(f"The resonating frequency is {w_res/(2 * np.pi)} (Hz)\n")
