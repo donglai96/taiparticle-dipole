@@ -1,4 +1,0 @@
-The resonating frequency is 980.0 (Hz)
-momentum of resonating particles are: 5.27404851767238E-18
-E0 is  9.44210221183822 keV
---- 44.08726406097412 seconds ---
